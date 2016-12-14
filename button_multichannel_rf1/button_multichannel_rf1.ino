@@ -571,8 +571,8 @@ void loop() {
       Serial.print(smoothedSenseHistory[channel][smoothedSenseIter] - channelMean[channel]);
       Serial.print(", ");
 
-      if (channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > 20) { 
-        chanThreshold[channel] = 4;
+      if (channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > 25) { 
+        chanThreshold[channel] = 3;
       }
 
       if (switchedCount == 0 && 
