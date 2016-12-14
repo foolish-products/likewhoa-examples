@@ -141,6 +141,8 @@ int sense4 = 9;       // pb5 -> A9   D9
 
 int elEnable = 20;    // pf5 -> A2   D20
 
+int detect = 5;
+
 int rxled = 30;
 int txled = 22;
 int rstled = 7;
@@ -170,6 +172,7 @@ int sampleVal = 0;
 // Helpers 
 
 int tempGlow[channelCount];
+byte tempGlow_unroll[channelCount * 2];
 void switchOutputs(bool* glow) { 
   // Make pins on the layout correspond to the pins on the switch 
   tempGlow[2] = glow[0];
@@ -177,33 +180,50 @@ void switchOutputs(bool* glow) {
   tempGlow[1] = glow[2];
   tempGlow[0] = glow[3];
 
+  // Process bit flips ahead of sending serial signal 
+  PORTF = PORTF | B10000000;
   for (int i = 0; i < 8; i++) {
     if (tempGlow[i / 2] == 1) { 
-      PORTF = PORTF | B01000000;
+      tempGlow_unroll[i] = PORTF | B01000000;
     }
     else { 
-      PORTF = PORTF & B10111111;
+      tempGlow_unroll[i] = PORTF & B10111111;
     }
+  }
+  
+  for (int i = 0; i < 8; i++) {
+    PORTF = tempGlow_unroll[i];
     //   digitalWrite(hvClock, LOW); 
     PORTF = PORTF & B01111111;
     //   digitalWrite(hvClock, HIGH);
     PORTF = PORTF | B10000000;
   }
+
+  
 }
 
-void switchHalfOutputs(int blah) { 
-  for (int i = 0; i < 8; i++) {
-    if (i % 2 == blah) { 
-      PORTF = PORTF | B01000000;
-    }
-    else { 
-      PORTF = PORTF & B10111111;
-    }
- //   digitalWrite(hvClock, LOW); 
+
+void switchHalfOutputsA() { 
+  for (int i = 0; i < 4; i++) {
+    PORTF = PORTF | B01000000;
     PORTF = PORTF & B01111111;
     PORTF = PORTF | B10000000;
-  //  delayMicroseconds(1);
- //   digitalWrite(hvClock, HIGH);
+    
+    PORTF = PORTF & B10111111;
+    PORTF = PORTF & B01111111;
+    PORTF = PORTF | B10000000;
+  }
+}
+
+void switchHalfOutputsB() { 
+  for (int i = 0; i < 4; i++) {
+    PORTF = PORTF & B10111111;
+    PORTF = PORTF & B01111111;
+    PORTF = PORTF | B10000000;
+    
+    PORTF = PORTF | B01000000;
+    PORTF = PORTF & B01111111;
+    PORTF = PORTF | B10000000;
   }
 }
 
@@ -222,6 +242,19 @@ void sort(int *a, int len)
    }
 }
 
+// This mutates the input array! Beware!
+float getMedian(int* array, int len) { 
+//  int len = sizeof(array);
+  sort(array, len); 
+  float tempVal = 0;
+  return array[(len / 2) + 1];
+  
+//  for (int i = (len / 2) - 1; i < (len / 2) + 2; i++) {
+//    tempVal += array[i];
+//  }
+//  return tempVal / 3;
+}
+
 void ledsOff() {
   digitalWrite(rxled, LOW);
   digitalWrite(txled, LOW);
@@ -234,6 +267,7 @@ void ledsOn() {
   digitalWrite(rstled, HIGH);
 }
 
+unsigned long microsdelay;
 
 // Arduino I/O is real slow.  Opaque bitwise port manipulation ftw!
 int adcSensePorts[] = {B00000000, B00000001, B00000011, B00000100};
@@ -241,26 +275,75 @@ int adcSensePorts[] = {B00000000, B00000001, B00000011, B00000100};
 // this is internal, use the interface functions below!
 bool toSense_internal[] = {true, true, true, true};
 int senseResults_internal[] = {0, 0, 0, 0};
+
+void initSense_withResistor(){ 
+ // listen to resistor
+
+    switchOutputs(noGlow);
+    //  digitalWrite(elEnable, HIGH);
+    PORTF = PORTF | B00100000;
+    delayMicroseconds(100);
+    
+//    microsdelay = micros();
+    while(bitRead(PINC, 6));
+    switchOutputs(allGlow);
+    switchHalfOutputsA();
+    while(!bitRead(PINC, 6));
+    while(bitRead(PINC, 6));
+    while(!bitRead(PINC, 6));
+    while(bitRead(PINC, 6));
+
+
+    switchOutputs(noGlow);
+    delayMicroseconds(30);
+
+//    microsdelay = micros() - microsdelay;
+}
+
+int spinner = 0;
+void initSense_withoutResistor() { 
+    // Hacky.  Allows charge to disappate faster - kills flicker.
+
+//    switchOutputs(allGlow);
+//    microsdelay = 0;
+//    while(bitRead(PINC, 6) || microsdelay < 20){
+//      microsdelay++;
+//    }
+    // digitalWrite(elEnable, LOW);
+    PORTF = PORTF & B11011111;
+    for (int i = 0; i < 26; i++) {
+      switchHalfOutputsA();
+      spinner = 0;
+      while(spinner < 50) { 
+        spinner++;
+      }
+      
+      switchHalfOutputsB();
+      spinner = 0;
+      while(spinner < 50) { 
+        spinner++;
+      }
+    }
+
+    // Make EL lamps float 
+    switchOutputs(noGlow);
+    delayMicroseconds(30);
+}
+
 void senseChannels_internal(int chargeDelay_micros = 1000) { 
     noInterrupts();
     
     // make sure pwm oscillator is running.
     pwm613configure(capSenseFrequency);
     pwmSet13(127);
-
-// TODO: Make it an option to turn off EL driver 
-
-// Allow EL lamps to discharge - shipped boards will be sync'ed 
-
-    // digitalWrite(elEnable, LOW);
-    PORTF = PORTF & B11011111;
+    
     // digitalWrite(clearPin, HIGH);
     PORTD = PORTD | B10000000;
 
     if (chargeDelay_micros < 1) {
       chargeDelay_micros = 1000;
     }
-
+    
 // Set ADC initialization bits - make sure things haven't gotten misconfigured.  
     // 6: right adjust bits // last 5 bits select ADC.
     ADMUX = adcSensePorts[0];
@@ -269,20 +352,7 @@ void senseChannels_internal(int chargeDelay_micros = 1000) {
     // disable adc
     ADCSRA = B00000110;
 
-    // Hacky.  Allows charge to disappate faster - kills flicker.
-    for (int i = 0; i < 34; i++) {
-      switchHalfOutputs(1);
-      switchHalfOutputs(0);
-    }
-    
-    // Open switches after EL driver is off to discharge further 
-    // Needs to be broken out to avoid flicker.  
-    switchOutputs(allGlow);
-    delayMicroseconds(500);
-
-// Make EL lamps float 
-    switchOutputs(noGlow);
-    delayMicroseconds(30);
+    initSense_withoutResistor();
 
 // Begin measurement sequence
     // digitalWrite(clearPin, LOW);
@@ -408,6 +478,8 @@ void setup() {
   pinMode(elEnable, OUTPUT);
   digitalWrite(elEnable, HIGH);
 
+  pinMode(detect, INPUT);
+
   pinMode(sense1, INPUT);
   pinMode(sense2, INPUT);
   pinMode(sense3, INPUT);
@@ -428,19 +500,13 @@ int val = 0;
 int minimum = 10000;
 int maximum = 0;
 
-#define senseSize 17
+#define senseSize 31
 int senseHistory[channelCount][senseSize];
 int senseHistoryTemp[senseSize];
 int senseHistoryIter = 0;
 
-#define smoothedSenseSize 11
-int smoothedSenseHistory[channelCount][smoothedSenseSize];
-int smoothedSenseIter = 0;
-
 bool isTouched = false;
 bool whereTouched[] = {false, false, false, false};
-
-
 
 float change = 0;
 
@@ -452,51 +518,73 @@ int switchedCount = 0;
 
 int* senseResults;
 
+#define smoothedSenseSize 25
+int smoothedSenseHistory[channelCount][smoothedSenseSize];
+int smoothedSenseIter = 0;
+
+
+#define smoothedTouchWindow 4
+float smoothedSampleMedian = 0;
+float smoothedSampleMin = 0;
+float smoothedSampleNew = 0;
+int smoothedSampleTemp[smoothedSenseSize - smoothedTouchWindow];
+
+int channelMean[] = {0, 0, 0, 0};
+int chanThreshold[] = {1,1,1,1};
+
 void loop() {
-    senseResults = senseAll(1500, false);
+    senseResults = senseAll(1500, true);
     
     smoothedSenseIter = (smoothedSenseIter + 1) % smoothedSenseSize;
 
+
+    // Get new smoothed value
+    Serial.print("Signal: ");
     for (int channel = 0; channel < channelCount; channel++) { 
       senseHistory[channel][senseHistoryIter] = senseResults[channel];
       senseHistoryIter++;
       if (senseHistoryIter == senseSize) { 
         senseHistoryIter = 0;
       }
-      int tempVal = 0;
+
       for (int i = 0; i < senseSize; i++) {
         senseHistoryTemp[i] = senseHistory[channel][i];
       }
+
+      int tempVal = 0;
       sort(senseHistoryTemp, senseSize);
   
-      for (int i = senseSize / 2 - 1; i < senseSize / 2 + 2; i++) {
+      for (int i = 10; i < 13; i++) {
         tempVal += senseHistoryTemp[i];
       }
 
       smoothedSenseHistory[channel][smoothedSenseIter] = tempVal / 3;
 
-      for (int i = 0; i < smoothedSenseSize; i++) { 
-        change += smoothedSenseHistory[channel][i];
-      }
-      change -= smoothedSenseSize * 
-                  (smoothedSenseHistory[channel][smoothedSenseIter] + 
-                   smoothedSenseHistory[channel][(smoothedSenseIter + smoothedSenseSize - 1) % smoothedSenseSize]) / 2;
-      
-      
-      
-
-      if (change > 15 && switchedCount == 0) {
-            isTouched = true;
-            whereTouched[channel] = true;
-          }
-//      Serial.print(smoothedSenseHistory[channel][(smoothedSenseIter + 1) % smoothedSenseSize] - 
-//                   smoothedSenseHistory[channel][smoothedSenseIter]);
- //     Serial.print(", ");
-
- //     Serial.print(change);  
-      change = 0;
+      Serial.print(smoothedSenseHistory[channel][smoothedSenseIter]);
+      Serial.print(", ");
     }
-    Serial.println(smoothedSenseHistory[0][smoothedSenseIter]);
+
+    for (int channel = 0; channel < channelCount; channel++) { 
+      channelMean[channel] = (channelMean[channel] + 
+                              smoothedSenseHistory[channel][(smoothedSenseIter + 1 + smoothedSenseSize) % smoothedSenseSize]) / 2;
+      Serial.print(", ");
+      Serial.print(smoothedSenseHistory[channel][smoothedSenseIter] - channelMean[channel]);
+      Serial.print(", ");
+
+      if (channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > 20) { 
+        chanThreshold[channel] = 4;
+      }
+
+      if (switchedCount == 0 && 
+          channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > chanThreshold[channel] && 
+          channelMean[channel] - smoothedSenseHistory[channel][(smoothedSenseIter + smoothedSenseSize - 1) % smoothedSenseSize] > chanThreshold[channel]){
+        isTouched = true;
+        whereTouched[channel] = true;
+      }
+      
+    }
+      
+    Serial.println();
     
 
     if (isTouched && switchedCount == 0) { 
@@ -509,7 +597,11 @@ void loop() {
           glow[chan] = !glow[chan];
         }
       }
-      switchedCount = 40;
+      switchedCount = 2 * smoothedSenseSize;
+      if (switchedCount < 50) {
+        switchedCount = 50;
+      }
+      smoothedSenseIter = 0;
     }
     
     switchOutputs(glow);
@@ -518,5 +610,5 @@ void loop() {
       switchedCount--;
     }
     
-    delay(10);
+    delay(11);
 }
