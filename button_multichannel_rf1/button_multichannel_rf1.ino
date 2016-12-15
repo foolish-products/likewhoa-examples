@@ -196,8 +196,9 @@ void switchOutputs(bool* glow) {
     //   digitalWrite(hvClock, LOW); 
     PORTF = PORTF & B01111111;
     //   digitalWrite(hvClock, HIGH);
-    PORTF = PORTF | B10000000;
+//    PORTF = PORTF | B10000000;
   }
+  PORTF = PORTF | B10000000;
 
   
 }
@@ -311,7 +312,7 @@ void initSense_withoutResistor() {
 //    }
     // digitalWrite(elEnable, LOW);
     PORTF = PORTF & B11011111;
-    for (int i = 0; i < 26; i++) {
+    for (int i = 0; i < 70; i++) {
       switchHalfOutputsA();
       spinner = 0;
       while(spinner < 50) { 
@@ -500,7 +501,7 @@ int val = 0;
 int minimum = 10000;
 int maximum = 0;
 
-#define senseSize 31
+#define senseSize 41
 int senseHistory[channelCount][senseSize];
 int senseHistoryTemp[senseSize];
 int senseHistoryIter = 0;
@@ -530,7 +531,7 @@ float smoothedSampleNew = 0;
 int smoothedSampleTemp[smoothedSenseSize - smoothedTouchWindow];
 
 int channelMean[] = {0, 0, 0, 0};
-int chanThreshold[] = {1,1,1,1};
+int chanThreshold[] = {5,5,5,5};
 
 void loop() {
     senseResults = senseAll(1500, true);
@@ -565,15 +566,15 @@ void loop() {
     }
 
     for (int channel = 0; channel < channelCount; channel++) { 
-      channelMean[channel] = (channelMean[channel] + 
-                              smoothedSenseHistory[channel][(smoothedSenseIter + 1 + smoothedSenseSize) % smoothedSenseSize]) / 2;
+      channelMean[channel] = (channelMean[channel] * 3 + 
+                              smoothedSenseHistory[channel][(smoothedSenseIter + 1 + smoothedSenseSize) % smoothedSenseSize]) / 4;
       Serial.print(", ");
       Serial.print(smoothedSenseHistory[channel][smoothedSenseIter] - channelMean[channel]);
       Serial.print(", ");
 
-      if (channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > 25) { 
-        chanThreshold[channel] = 3;
-      }
+//      if (channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > 25) { 
+//        chanThreshold[channel] = 3;
+//      }
 
       if (switchedCount == 0 && 
           channelMean[channel] - smoothedSenseHistory[channel][smoothedSenseIter] > chanThreshold[channel] && 
@@ -610,5 +611,5 @@ void loop() {
       switchedCount--;
     }
     
-    delay(11);
+    delay(8);
 }
