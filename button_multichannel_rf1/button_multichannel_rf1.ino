@@ -519,7 +519,7 @@ int switchedCount = 0;
 
 int* senseResults;
 
-#define smoothedSenseSize 25
+#define smoothedSenseSize 20
 int smoothedSenseHistory[channelCount][smoothedSenseSize];
 int smoothedSenseIter = 0;
 
@@ -531,7 +531,7 @@ float smoothedSampleNew = 0;
 int smoothedSampleTemp[smoothedSenseSize - smoothedTouchWindow];
 
 int channelMean[] = {0, 0, 0, 0};
-int chanThreshold[] = {5,5,5,5};
+int chanThreshold[] = {9,9,9,9};
 
 void loop() {
     senseResults = senseAll(1500, true);
@@ -555,19 +555,30 @@ void loop() {
       int tempVal = 0;
       sort(senseHistoryTemp, senseSize);
   
-      for (int i = 10; i < 13; i++) {
+      for (int i = 0; i < 2; i++) {
         tempVal += senseHistoryTemp[i];
       }
 
-      smoothedSenseHistory[channel][smoothedSenseIter] = tempVal / 3;
+      smoothedSenseHistory[channel][smoothedSenseIter] = tempVal / 2;
 
       Serial.print(smoothedSenseHistory[channel][smoothedSenseIter]);
       Serial.print(", ");
+
+
+//    if(senseHistoryIter==0  && channel == 2){
+//      for(int i=0; i<25; i++){
+//        Serial.print(senseHistoryTemp[i]);
+//        Serial.print(", ");
+//      }
+//      Serial.println();
+//      
+//    }
+    
     }
 
     for (int channel = 0; channel < channelCount; channel++) { 
-      channelMean[channel] = (channelMean[channel] * 3 + 
-                              smoothedSenseHistory[channel][(smoothedSenseIter + 1 + smoothedSenseSize) % smoothedSenseSize]) / 4;
+      channelMean[channel] = (channelMean[channel] * 2 + 
+                              smoothedSenseHistory[channel][(smoothedSenseIter + 1 + smoothedSenseSize) % smoothedSenseSize]) / 3;
       Serial.print(", ");
       Serial.print(smoothedSenseHistory[channel][smoothedSenseIter] - channelMean[channel]);
       Serial.print(", ");
@@ -586,6 +597,7 @@ void loop() {
     }
       
     Serial.println();
+
     
 
     if (isTouched && switchedCount == 0) { 
