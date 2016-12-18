@@ -497,7 +497,7 @@ void setup() {
   senseResults = senseAll(1500, true);
 }
 
-#define ENABLE_LOGGING
+// #define ENABLE_LOGGING
 
 #ifdef ENABLE_LOGGING
 
@@ -562,7 +562,7 @@ int chanChangeCount;
 #define glowTime_ms 6
 
 void loop() {
-    senseResults = senseAll(1300, true);
+    senseResults = senseAll(1500, true);
     
     smoothedSenseIter = (smoothedSenseIter + 1) % smoothedSenseSize;
 
