@@ -347,7 +347,7 @@ void senseChannels_internal(int chargeDelay_micros = 1000) {
     
 // Set ADC initialization bits - make sure things haven't gotten misconfigured.  
     // 6: right adjust bits // last 5 bits select ADC.
-    ADMUX = adcSensePorts[0];
+    ADMUX = adcSensePorts[3];
     // high speed mode / 0 / analog selection, extra bit.
     ADCSRB = B10100000;
     // disable adc
@@ -361,25 +361,23 @@ void senseChannels_internal(int chargeDelay_micros = 1000) {
     
     delayMicroseconds(chargeDelay_micros);
 // start measurement
-    for(int i = 0; i < 4; i++) {
+// Go backwords so that channel 4 has the lowest sensitivity and 1 has the highest.
+    for(int i = 3; i >= 0; i--) {
       if (toSense_internal[i]) {
         // enable / start / auto trigger / interrupt flag / interrupt enable /// scale /// p.315
         ADCSRA = B11000110;
         delayMicroseconds(50);
-        ADMUX = adcSensePorts[(i + 1) % 4];
+        ADMUX = adcSensePorts[(i + 3) % 4];
         while ((ADCSRA & B01000000));
         sampleVal = ADCL;    // store lower byte ADC
         sampleVal += ADCH << 8;  // store higher bytes ADC
         senseResults_internal[i] = sampleVal;
       }
       else { 
-        ADMUX = adcSensePorts[(i + 1) % 4];
+        ADMUX = adcSensePorts[(i + 3) % 4];
         senseResults_internal[i] = -1;
       }
-//      Serial.print(sampleVal);
-//      Serial.print(", "); 
     }
-//    Serial.println(" ");
 
    //  digitalWrite(elEnable, HIGH);
    PORTF = PORTF | B00100000;
@@ -463,6 +461,8 @@ void ensureCorrectFrequency() {
 
 //////////~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~///////////
 
+int* senseResults;
+
 void setup() {
   Serial.begin(9600);  
 
@@ -494,7 +494,12 @@ void setup() {
   
   // this should be called after the clear pin is set low
   ensureCorrectFrequency();
+  senseResults = senseAll(1500, true);
 }
+
+#define ENABLE_LOGGING
+
+#ifdef ENABLE_LOGGING
 
 // Do this instead of using a bunch of individual Serial.print statements to save time!
 // If your wire starts flashing when you are logging, this might be why!
@@ -509,6 +514,8 @@ char impulseBuffer[subBufferSize];
 // These are in reference to the impulse, which is itself a funny denoising derivative-y thing
 char tailMeanBufferBuffer[subBufferSize];
 char derivativeBuffer[subBufferSize];
+
+#endif
 
 int val = 0;
 
@@ -531,8 +538,6 @@ bool isOn = true;
 bool justSwitched = false;
 int switchedCount = 0;
 
-int* senseResults;
-
 #define smoothedSenseSize 15
 int smoothedSenseHistory[channelCount][smoothedSenseSize];
 int smoothedSenseIter = 0;
@@ -548,10 +553,16 @@ int channelMean[] = {0, 0, 0, 0};
 int chanImpulse; 
 int chanPrevImpulse;
 int chanChangeCount;
-int chanThreshold[] = {4,4,4,4};
+
+// Here are the main levers which control the operation of this program
+#define increaseWindow 9
+#define pureIncreaseThreshold 5
+#define increaseThresholdWithImpulse 3
+#define impulseThreshold 4
+#define glowTime_ms 6
 
 void loop() {
-    senseResults = senseAll(1500, true);
+    senseResults = senseAll(1300, true);
     
     smoothedSenseIter = (smoothedSenseIter + 1) % smoothedSenseSize;
 
@@ -598,7 +609,7 @@ void loop() {
       chanChangeCount = 0;
 
       int senseDiff;
-      for (int steps = 0; steps < 9; steps++) {
+      for (int steps = 0; steps < increaseWindow; steps++) {
         senseDiff = smoothedSenseHistory[channel][(smoothedSenseIter - (steps + 1) + smoothedSenseSize) % smoothedSenseSize]
             - smoothedSenseHistory[channel][(smoothedSenseIter - (steps) + smoothedSenseSize) % smoothedSenseSize];
         
@@ -610,18 +621,13 @@ void loop() {
       
       
       if (switchedCount == 0 && 
-           ((chanImpulse > 3 && chanChangeCount >= 3) || 
-            (chanChangeCount >= 5)) ){
+           ((chanImpulse > impulseThreshold && chanChangeCount >= increaseThresholdWithImpulse) || 
+            (chanChangeCount >= pureIncreaseThreshold)) ){
         isTouched = true;
         whereTouched[channel] = true;
       }
 
-      if (switchedCount == 0 && 
-           chanImpulse <= 0 && 
-//           chanPrevImpulse > chanThreshold[channel] && 
-           chanChangeCount >= 3){
-        Serial.print("sdfsdfsddsfsdfds    ");
-      }
+#ifdef ENABLE_LOGGING
 
     // EXEX - Logging inline - pull into a function!
     int tailMeanlen;
@@ -654,18 +660,12 @@ void loop() {
       default:
         break;
     }
-
-
-
-
-
-
-      
-      
+#endif
+ 
     }
-      
-  int signallen;
 
+#ifdef ENABLE_LOGGING
+  int signallen;
   for (int chan = 0; chan < channelCount; chan++) {
     switch (chan) {
       case 0:
@@ -694,6 +694,7 @@ void loop() {
            derivativeBuffer, "");
 
   Serial.println(logBuffer);
+#endif
 
     
 
@@ -708,10 +709,6 @@ void loop() {
         }
       }
       switchedCount = 1.5 * smoothedSenseSize;
-//      if (switchedCount < 50) {
-//        switchedCount = 50;
-//      }
-//      smoothedSenseIter = 0;
     }
     
     switchOutputs(glow);
@@ -720,5 +717,5 @@ void loop() {
       switchedCount--;
     }
     
-    delay(8);
+    delay(glowTime_ms);
 }
