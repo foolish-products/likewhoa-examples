@@ -314,7 +314,7 @@ void initSense_withoutResistor() {
 //    }
     // digitalWrite(elEnable, LOW);
     PORTF = PORTF & B11011111;
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < 30; i++) {
       switchHalfOutputsA();
       spinner = 0;
       while(spinner < 34) { 
@@ -450,7 +450,8 @@ int* senseAllActive(int chargeDelay_micros = 1000, bool isGlow = true) {
   }
 
   // Change threshold for activating, might want to make this smaller?
-  if (inactiveMeasure[activeProbe] - senseResults_internal[activeProbe] > 100) { 
+  if (inactiveMeasure[activeProbe] - senseResults_internal[activeProbe] > 50 || 
+      senseResults_internal[activeProbe] < 400) { 
     isSense_active[activeProbe] = true;
   }
   else { 
@@ -618,12 +619,12 @@ int chanPrevImpulse;
 int chanChangeCount;
 
 // Here are the main levers which control the operation of this program
-#define increaseWindow 13
+#define increaseWindow 17
 #define pureIncreaseThreshold 5
 #define increaseThresholdWithImpulse 3
-#define impulseThreshold 4
-#define bigImpulseThreshold 7
-#define glowTime_us 1000
+#define impulseThreshold 3
+#define bigImpulseThreshold 8
+#define glowTime_us 1300
 
 void loop() {
     senseResults = senseAllActive(1000, true);
