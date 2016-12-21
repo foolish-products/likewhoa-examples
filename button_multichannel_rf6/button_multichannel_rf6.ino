@@ -314,16 +314,16 @@ void initSense_withoutResistor() {
 //    }
     // digitalWrite(elEnable, LOW);
     PORTF = PORTF & B11011111;
-    for (int i = 0; i < 70; i++) {
+    for (int i = 0; i < 20; i++) {
       switchHalfOutputsA();
       spinner = 0;
-      while(spinner < 50) { 
+      while(spinner < 34) { 
         spinner++;
       }
       
       switchHalfOutputsB();
       spinner = 0;
-      while(spinner < 50) { 
+      while(spinner < 34) { 
         spinner++;
       }
     }
@@ -548,8 +548,14 @@ void setup() {
   senseResults = senseAll(2300, true);
   for (int i = 0; i < 4; i++) {
     if (senseResults[i] > 620) { 
-      inactiveMeasure[i] = senseResults[i];
       isSense_active[i] = false;
+    }
+  }
+
+  senseResults = senseAll(1000, true);
+  for (int i = 0; i < 4; i++) {
+    if (isSense_active[i]) { 
+      inactiveMeasure[i] = senseResults[i];
     }
   }
 }
@@ -615,12 +621,12 @@ int chanChangeCount;
 #define increaseWindow 13
 #define pureIncreaseThreshold 5
 #define increaseThresholdWithImpulse 3
-#define impulseThreshold 3
-#define bigImpulseThreshold 6
-#define glowTime_us 1700
+#define impulseThreshold 4
+#define bigImpulseThreshold 7
+#define glowTime_us 1000
 
 void loop() {
-    senseResults = senseAllActive(1500, true);
+    senseResults = senseAllActive(1000, true);
     
     smoothedSenseIter = (smoothedSenseIter + 1) % smoothedSenseSize;
 
